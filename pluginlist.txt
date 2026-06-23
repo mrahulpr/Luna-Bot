@@ -1,2 +1,2 @@
-echo.py
+
 start_plugin.py
