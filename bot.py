@@ -27,7 +27,7 @@ def edit_msg(base_url, chat_id, message_id, text):
         print(f"Edit failed: {e}")
 
 def run(token, owner_id, security_key, log_chat_id):
-    # Dynamically import plugins safely
+    # Explicitly import the correct files matching your pluginlist
     import echo_plugin
     import start_plugin
     
@@ -36,12 +36,10 @@ def run(token, owner_id, security_key, log_chat_id):
     
     # Send boot alert to your log chat right away
     send_msg(base_url, log_chat_id, "🟢 System Online: ESP32-CAM Booted & Sync Complete.")
-    
     print("Bot engine is running rapidly...")
     
     while True:
         try:
-            # Short timeout (1 sec) prevents long socket blocking so multi-users don't freeze the bot
             url = f"{base_url}/getUpdates?offset={offset}&timeout=1"
             res = urequests.get(url)
             
@@ -59,7 +57,7 @@ def run(token, owner_id, security_key, log_chat_id):
                         chat_id = str(message["chat"]["id"])
                         text = message.get("text", "").strip()
                         
-                        # 1. Handle Security Key input state
+                        # 1. Active Verification Session State Check
                         if chat_id in pending_updates:
                             session = pending_updates[chat_id]
                             if utime.time() - session["time"] > 10:
@@ -74,24 +72,27 @@ def run(token, owner_id, security_key, log_chat_id):
                                     del pending_updates[chat_id]
                             continue
 
-                        # 2. Handle commands
+                        # 2. Strict Command Interception
                         if text == "/update":
+                            print("Update command intercepted. Requesting verification key...")
                             send_msg(base_url, chat_id, "🔐 Verification Required.\nEnter your 4-digit Security Key within 10 seconds:")
                             pending_updates[chat_id] = {"time": utime.time()}
                             continue
                             
                         elif text == "/start":
+                            print("Start command intercepted.")
                             start_plugin.handle_update(update, base_url)
                             continue
                         
-                        # 3. Fallback to normal plugins
+                        # 3. Text Message Fallback
+                        print(f"Received: {text}")
                         echo_plugin.handle_update(update, base_url)
             else:
                 res.close()
         except Exception as e:
             print(f"Loop error: {e}")
             
-        # Clear out expired update tracking tokens safely
+        # Clear out expired updates automatically
         current_time = utime.time()
         for cid in list(pending_updates.keys()):
             if current_time - pending_updates[cid]["time"] > 10:
@@ -99,22 +100,21 @@ def run(token, owner_id, security_key, log_chat_id):
                 del pending_updates[cid]
                 
         gc.collect()
-        utime.sleep(0.1) # Rapid sleep to prevent CPU hogging but keep updates smooth
+        utime.sleep(0.1)
 
 def trigger_update_sequence(base_url, user_chat_id, log_chat_id):
     url = f"{base_url}/sendMessage"
     headers = {'Content-Type': 'application/json'}
     
-    # Notify system owner
     try:
         res = urequests.post(url, data=ujson.dumps({"chat_id": str(user_chat_id), "text": "🔄 Auth success! Updating..."}), headers=headers)
         msg_data = res.json()
         res.close()
         msg_id = msg_data["result"]["message_id"]
     except:
+        machine.reset()
         return
 
-    # Log to the Dedicated Log Chat Channel
     send_msg(base_url, log_chat_id, f"⚠️ Notice: Update triggered by user session {user_chat_id}. Rebooting hardware now...")
     
     animations = [
