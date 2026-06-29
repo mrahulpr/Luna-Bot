@@ -9,11 +9,16 @@ from telegram.ext import Application, ContextTypes
 from telegram.ext import PicklePersistence
 from telegram.error import Conflict
 from dotenv import load_dotenv
+
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 LOG_CHAT_ID = int(os.getenv("LOG_CHAT_ID"))
+
+# --- NEW: Webhook Variables ---
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", "8443"))
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -63,6 +68,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         except Exception as delete_error:
             logging.error(f"Failed to handle ephemeral message: {delete_error}")
 
+
 def load_plugins(application: Application) -> None:
     """Dynamically loads modules from the plugins directory."""
     plugins_dir = "plugins"
@@ -77,6 +83,7 @@ def load_plugins(application: Application) -> None:
             if hasattr(module, "setup"):
                 module.setup(application)
                 logging.info(f"Successfully loaded module: {filename}")
+
 
 def main() -> None:
     """Starts the application."""
@@ -98,9 +105,16 @@ def main() -> None:
     # Dynamic plugin loading
     load_plugins(application)
     
-    logging.info("Bot is now polling...")
-    # This prevents the bot from answering old messages on startup
-    application.run_polling(drop_pending_updates=True)
+    logging.info(f"Bot is starting on Webhook at {WEBHOOK_URL}...")
+    
+    # --- CHANGED: Webhook setup replaces run_polling ---
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=BOT_TOKEN,
+        webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
+        drop_pending_updates=True
+    )
 
 if __name__ == "__main__":
     main()
