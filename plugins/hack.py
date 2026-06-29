@@ -3,11 +3,9 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
-# Retrieve the owner ID from the environment
 OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 
 async def hack(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates a fake hacking sequence on the user being replied to."""
     if not update.message.reply_to_message:
         return await update.message.reply_text(
             "⚠️ You must reply to someone's message to use this command\\.", 
@@ -34,28 +32,21 @@ async def hack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     last_text = msg.text
 
+    # Combined frames to drop the total API call count by half
     animation = [
-        "Scanning target...",
-        "Target locked.",
-        "Connecting to secured server...",
-        "Bypassing firewall 1...",
-        "Bypassing firewall 2...",
-        "Bypassing firewall 3...",
-        "Installing payload... 10% 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜",
+        "Scanning target...\n> Target locked.",
+        "Connecting to secured server...\n> Bypassing firewalls...",
         "Installing payload... 25% 🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜",
         "Installing payload... 67% 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜",
-        "Installing payload... 91% 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜",
         "Installing payload... 100% 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩",
-        "Uploading payload...",
-        "Finalizing connection...",
-        "Generating exploit link...",
-        "Target successfully hacked!",
+        "Uploading payload...\n> Finalizing connection...",
+        "Generating exploit link...\n> Target successfully hacked!",
     ]
 
     buffer = []
     for line in animation:
         buffer.append(line)
-        if len(buffer) > 4:
+        if len(buffer) > 3:
             buffer.pop(0)
 
         text_to_send = "```\n" + "\n".join(f"> {l}" for l in buffer) + "\n```"
@@ -67,23 +58,21 @@ async def hack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
         
-        await asyncio.sleep(1.2)
+        # Increased to 2.0 seconds to prevent Telegram from blocking multiple users
+        await asyncio.sleep(2.0)
 
     await msg.edit_text(
         "> Target compromised\\. Click below to access the panel\\.",
         reply_markup=InlineKeyboardMarkup(
-            # Removed invalid Discord 'style' argument
             [[InlineKeyboardButton("🕵️ View Hacked File", url="https://t.me/c/1478246163/16150/16152")]]
         ),
         parse_mode="MarkdownV2"
     )
 
 async def hack_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Callback function for the help menu button."""
     query = update.callback_query
     await query.answer()
     
-    # Removed invalid Discord 'style' argument
     keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="help")]]
     text = (
         "💻 *Hack Plugin*\n\n"
@@ -98,6 +87,5 @@ async def hack_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
 def setup(app) -> None:
-    """Adds the command and callback handlers to the application."""
     app.add_handler(CommandHandler("hack", hack))
     app.add_handler(CallbackQueryHandler(hack_help_callback, pattern="^plugin::hack$"))
