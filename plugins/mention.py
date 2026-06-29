@@ -146,7 +146,7 @@ def setup(application) -> None:
     """Dynamically loaded by main.py to register handlers."""
     
     # 1. Regex handler for text-based keywords
-    regex_pattern = r'^(?i)(@all|#all|@mentionall)'
+    regex_pattern = r'(?i)^(@all|#all|@mentionall)'
     application.add_handler(MessageHandler(filters.Regex(regex_pattern), trigger_mention_panel))
     
     # 2. Command handler for /mention
