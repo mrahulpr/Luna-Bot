@@ -1,12 +1,10 @@
 import os
-import sys
 import importlib
 import logging
 import traceback
 import asyncio
 from telegram import Update
-from telegram.ext import Application, ContextTypes, ApplicationBuilder
-from telegram.ext import PicklePersistence
+from telegram.ext import ApplicationBuilder, ContextTypes, PicklePersistence
 from telegram.error import Conflict
 from dotenv import load_dotenv
 
@@ -27,12 +25,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
     tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
     tb_string = "".join(tb_list)
-    
-    error_log = (
-        f"🚨 **An Error Occurred**\n\n"
-        f"**Update Details:**\n`{update}`\n\n"
-        f"**Traceback:**\n`{tb_string[:3000]}`"
-    )
+    error_log = f"🚨 **An Error Occurred**\n\n**Update Details:**\n`{update}`\n\n**Traceback:**\n`{tb_string[:3000]}`"
     
     try:
         await context.bot.send_message(chat_id=LOG_CHAT_ID, text=error_log, parse_mode="Markdown")
@@ -41,47 +34,40 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if isinstance(update, Update) and update.effective_chat:
         try:
-            temp_message = await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ **An internal error occurred.**"
-            )
+            temp_message = await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ **An internal error occurred.**")
             await asyncio.sleep(10)
-            await context.bot.delete_message(
-                chat_id=update.effective_chat.id, 
-                message_id=temp_message.message_id
-            )
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=temp_message.message_id)
         except Exception:
             pass
 
-def load_plugins(application: Application) -> None:
+def load_plugins(application) -> None:
     plugins_dir = "plugins"
     if not os.path.exists(plugins_dir):
         os.makedirs(plugins_dir)
         return
-
     for filename in os.listdir(plugins_dir):
         if filename.endswith(".py") and not filename.startswith("__"):
-            module_name = f"{plugins_dir}.{filename[:-3]}"
-            module = importlib.import_module(module_name)
+            module = importlib.import_module(f"{plugins_dir}.{filename[:-3]}")
             if hasattr(module, "setup"):
                 module.setup(application)
                 logging.info(f"Successfully loaded module: {filename}")
 
 def main() -> None:
-    """Starts the application with concurrency enabled."""
+    # Persistence enabled with concurrent-safe settings
+    my_persistence = PicklePersistence(filepath="bot_data", single_file=True)
     
-    # Enable concurrent_updates to allow multiple commands to run at once
     application = (
         ApplicationBuilder()
         .token(BOT_TOKEN)
-        .concurrent_updates(True) 
+        .persistence(persistence=my_persistence)
+        .concurrent_updates(True) # This enables the concurrent processing
         .build()
     )
     
     application.add_error_handler(error_handler)
     load_plugins(application)
     
-    logging.info("Bot is now polling with concurrency enabled...")
+    logging.info("Bot is now polling with full concurrency...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
