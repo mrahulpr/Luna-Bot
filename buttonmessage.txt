@@ -2,7 +2,7 @@
 Hi 👋 {name}
 Welcome 😁, glad to meet you here, iam a simple group management bot to help to manage telegram groups and Currently iam in initial stages of its development use below buttons to navigate along with my features ❤️\.
 ===ABOUT===
-*> About Me 🤩*
+*About Me 🤩*
 
 \> 🤖 *Bot Name* : [*𝙻𝚞𝚗𝚊*](https://t.me/Taskieebot)
 \> 👨‍💻 *Daddy* : [*𝚁𝚊𝚑𝚞𝚕*](https://t.me/rahulp_r)
