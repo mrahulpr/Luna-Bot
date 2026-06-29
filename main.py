@@ -8,7 +8,6 @@ from telegram import Update
 from telegram.ext import Application, ContextTypes
 
 
-from dotenv import load_env_file_or_similar # This might vary, use standard:
 from dotenv import load_dotenv
 load_dotenv()
 
