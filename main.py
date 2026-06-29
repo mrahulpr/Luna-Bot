@@ -6,7 +6,7 @@ import traceback
 import asyncio
 from telegram import Update
 from telegram.ext import Application, ContextTypes
-
+from telegram.ext import PicklePersistence
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -80,7 +80,17 @@ def load_plugins(application: Application) -> None:
 
 def main() -> None:
     """Starts the application."""
-    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # 1. Initialize the persistence object
+    my_persistence = PicklePersistence(filepath="bot_data")
+    
+    # 2. Add .persistence() to your Application builder
+    application = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .persistence(persistence=my_persistence)
+        .build()
+    )
     
     # Register global error handling
     application.add_error_handler(error_handler)
