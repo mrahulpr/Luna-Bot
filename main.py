@@ -19,26 +19,35 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Universal error reporting system."""
-    # Generate detailed traceback
+    """Universal error reporting system with loop protection."""
+    
+    # 1. Always log the error locally to your VPS console
+    logging.error(msg="Exception while handling an update:", exc_info=context.error)
+
+    # 2. CRITICAL FIX: If the error is a 409 Conflict, exit immediately.
+    # This prevents the bot from making API calls that cause infinite log loops.
+    if isinstance(context.error, Conflict):
+        return
+
+    # 3. Process tracebacks only for other types of errors
     tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
     tb_string = "".join(tb_list)
     
-    # Format permanent log details
     error_log = (
         f"🚨 **An Error Occurred**\n\n"
         f"**Update Details:**\n`{update}`\n\n"
         f"**Traceback:**\n`{tb_string[:3000]}`"
     )
     
-    # 1. Send permanent details to the log chat
+    # Send permanent details to the log chat
     try:
         await context.bot.send_message(chat_id=LOG_CHAT_ID, text=error_log, parse_mode="Markdown")
     except Exception as log_error:
         logging.error(f"Failed sending to log chat: {log_error}")
 
-    # 2. Send temporary notice to the point of happening and auto-delete
+    # Send temporary notice to the point of happening and auto-delete
     if isinstance(update, Update) and update.effective_chat:
         try:
             temp_message = await context.bot.send_message(
