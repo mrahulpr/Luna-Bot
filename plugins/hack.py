@@ -7,11 +7,7 @@ from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 
 async def hack(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Simulates a fake hacking sequence on the user being replied to.
-    The animation is displayed within a MarkdownV2 code block for a terminal-like effect.
-    """
-    # Check if the command is a reply to a message.
+    """Simulates a fake hacking sequence on the user being replied to."""
     if not update.message.reply_to_message:
         return await update.message.reply_text(
             "⚠️ You must reply to someone's message to use this command\\.", 
@@ -22,28 +18,22 @@ async def hack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot = context.bot
     me = await bot.get_me()
 
-    # Prevent the bot from "hacking" itself.
     if target.id == me.id:
         return await update.message.reply_text(
             "🤖 I don't hack myself\\.\\.\\. nice try 😂", 
             parse_mode="MarkdownV2"
         )
     
-    # A fun check for the bot's owner.
     if target.id == OWNER_ID:
         return await update.message.reply_text("🫣 I will hack my owner... please don't tell him!")
 
-    # Send the initial message, starting the code block.
     msg = await update.message.reply_text(
         "```\n> Initializing hack sequence...\n```", 
         parse_mode="MarkdownV2"
     )
     
-    # Keep track of the last text to avoid "message is not modified" errors.
     last_text = msg.text
 
-    # Animation frames. No character escaping is needed here because they
-    # will be rendered inside the code block.
     animation = [
         "Scanning target...",
         "Target locked.",
@@ -65,40 +55,36 @@ async def hack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     buffer = []
     for line in animation:
         buffer.append(line)
-        # This creates the scrolling effect.
         if len(buffer) > 4:
             buffer.pop(0)
 
-        # Construct the text to be displayed inside the code block.
         text_to_send = "```\n" + "\n".join(f"> {l}" for l in buffer) + "\n```"
         
-        # Only edit the message if the content has changed.
         if text_to_send != last_text:
             try:
                 await msg.edit_text(text_to_send, parse_mode='MarkdownV2')
                 last_text = text_to_send
             except Exception:
-                # Silently ignore errors locally, like being rate-limited or MessageNotModified.
                 pass
         
-        # Pause between frames.
         await asyncio.sleep(1.2)
 
-    # Final message after the animation completes.
     await msg.edit_text(
         "> Target compromised\\. Click below to access the panel\\.",
         reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🕵️ View Hacked File", url="https://t.me/c/1478246163/16150/16152", style="primary")]]
+            # Removed invalid Discord 'style' argument
+            [[InlineKeyboardButton("🕵️ View Hacked File", url="https://t.me/c/1478246163/16150/16152")]]
         ),
         parse_mode="MarkdownV2"
     )
-
 
 async def hack_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Callback function for the help menu button."""
     query = update.callback_query
     await query.answer()
-    keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="help", style="danger")]]
+    
+    # Removed invalid Discord 'style' argument
+    keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="help")]]
     text = (
         "💻 *Hack Plugin*\n\n"
         "Simulates a fake hacking sequence as a prank\\.\n\n"
