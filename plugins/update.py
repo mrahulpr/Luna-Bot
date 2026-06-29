@@ -67,7 +67,7 @@ async def update_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
     await status.edit_text("📦 Installing requirements...")
     
-    _, pip_err, pip_rc = await run_sh(f"{sys.executable} -m pip install -r requirements.txt")
+    _, pip_err, pip_rc = await run_sh(f"{sys.executable} -m pip install -r requirements.txt --break-system-packages")
     
     # Rollback trigger
     if pip_rc != 0:
