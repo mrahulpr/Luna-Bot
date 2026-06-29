@@ -1,0 +1,22 @@
+===WELCOME===
+Hi 👋 {name}
+Welcome 😁, glad to meet you here, iam a simple group management bot to help to manage telegram groups and Currently iam in initial stages of its development use below buttons to navigate along with my features ❤️\.
+===ABOUT===
+*About Me 🤩*
+\> 🤖 *Bot Name* : [*\- Luna Bot \-*](https://t.me/Taskieebot)
+\> 👨‍💻 *Daddy* : [*\- Rahul P R \-*](https://t.me/rahulp_r)
+\> 💻 *Total Users* : *1* || \[ Only You 🥺 \] ||
+\> 🔢 *Version* : *v1\.0\.7 \[ Beta \]*
+\> ☂️ *Server* : *Paid Alla 😐*
+\> 💿 *Storage* : *5 GB 🥶*
+
+[*©️ Webotz*](https://t.me/webotz)
+===HELP===
+*📖 Help Menu*
+
+*/start* \- Launch the bot\.
+*/help* \- Show help menu\.
+*/ping* \- To get information about Speed\.
+*/hack* \- To make an hack someone\.
+*/id* \- To Get id of a Chat\.
+*/reacts* \- Auto Reaction to Messages\.
