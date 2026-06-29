@@ -31,14 +31,28 @@ def load_texts() -> dict:
     return texts
 
 def get_total_users(context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Helper to calculate total unique members across all cached chats."""
+    """
+    Safely calculates total unique members across all cached chats.
+    Catches errors if chat_data components are not in the expected dictionary layout.
+    """
     total = 0
-    for data in context.application.chat_data.values():
-        total += len(data.get('members', {}))
+    try:
+        if not context.application.chat_data:
+            return 0
+            
+        for data in context.application.chat_data.values():
+            # Ensure 'data' is actually a dictionary before calling .get()
+            if isinstance(data, dict):
+                members = data.get('members', {})
+                if isinstance(members, dict):
+                    total += len(members)
+    except Exception:
+        # Fallback to 0 if anything unexpected happens within chat_data layout
+        return 0
     return total
 
 def escape_markdown_v2(text: str) -> str:
-    """Escapes raw characters for MarkdownV2 insertion (like numbers/dots)."""
+    """Escapes raw characters for MarkdownV2 insertion."""
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
 
@@ -131,7 +145,6 @@ async def start_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 reply_markup=markup
             )
     except BadRequest as e:
-        # Ignore Telegram's error if the user clicks the exact same button multiple times
         if "Message is not modified" in str(e):
             pass
         else:
