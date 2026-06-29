@@ -29,6 +29,14 @@ def load_texts() -> dict:
 
     return texts
 
+def get_total_users(context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Helper to calculate total unique members across all cached chats."""
+    total = 0
+    # Iterates through all chat_data stored by PicklePersistence
+    for data in context.application.chat_data.values():
+        total += len(data.get('members', {}))
+    return total
+
 def get_main_keyboard() -> InlineKeyboardMarkup:
     """Returns the main inline keyboard."""
     keyboard = [
@@ -89,11 +97,15 @@ async def start_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     texts = load_texts()
     
     if query.data == "start_about":
-        text_content = texts["about"]
+        # Calculate dynamic users and inject into the text
+        total_users = get_total_users(context)
+        text_content = texts["about"].replace("{total_users}", str(total_users))
         markup = get_back_keyboard()
+        
     elif query.data == "start_help":
         text_content = texts["help"]
         markup = get_back_keyboard()
+        
     elif query.data == "start_back":
         user = update.effective_user
         mention = f"[{user.first_name}](tg://user?id={user.id})"
@@ -102,6 +114,7 @@ async def start_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     else:
         return
 
+    # Update the message with the new text and keyboard
     if query.message.photo:
         await query.edit_message_caption(
             caption=text_content,
