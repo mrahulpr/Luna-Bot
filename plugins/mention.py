@@ -26,7 +26,7 @@ async def trigger_mention_panel(update: Update, context: ContextTypes.DEFAULT_TY
         InlineKeyboardButton("Start Mention", callback_data="mention_start"),
         InlineKeyboardButton("Cancel", callback_data="mention_cancel")
     ]]
-    await update.message.reply_text("Mention Panel:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("Mention Confirmation, Click Below button to start the process or to cancel 🚗", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def mention_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
