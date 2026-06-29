@@ -7,6 +7,11 @@ import asyncio
 from telegram import Update
 from telegram.ext import Application, ContextTypes
 
+
+from dotenv import load_env_file_or_similar # This might vary, use standard:
+from dotenv import load_dotenv
+load_dotenv()
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 LOG_CHAT_ID = int(os.getenv("LOG_CHAT_ID"))
