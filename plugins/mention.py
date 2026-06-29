@@ -49,7 +49,7 @@ async def trigger_mention_panel(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if not await is_admin(chat, user_id):
-        return  # Ignore silently if a regular user tries to trigger it
+        return
 
     keyboard = [
         [
@@ -96,7 +96,6 @@ async def mention_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context.chat_data['mention_active'] = True
         await query.edit_message_text("Mentioning started... Admins can use `/cancel` to stop.")
         
-        # Start background task to mention users without blocking the application
         asyncio.create_task(run_mentions(chat.id, members, context))
 
 async def run_mentions(chat_id: int, members: list, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -104,7 +103,7 @@ async def run_mentions(chat_id: int, members: list, context: ContextTypes.DEFAUL
     chunk_size = 5
     for i in range(0, len(members), chunk_size):
         if not context.chat_data.get('mention_active', False):
-            break  # Break loop if an admin cancelled
+            break
             
         chunk = members[i:i + chunk_size]
         text_lines = []
@@ -118,10 +117,9 @@ async def run_mentions(chat_id: int, members: list, context: ContextTypes.DEFAUL
         try:
             await context.bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML')
         except Exception:
-            # Let unhandled exceptions bubble to global reporter, but stop loop to avoid flood blocks
             break
             
-        await asyncio.sleep(2.5)  # Throttle to prevent Telegram API flood limits
+        await asyncio.sleep(2.5)
         
     context.chat_data['mention_active'] = False
 
@@ -133,30 +131,24 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if chat.type == 'private':
         return
         
+    # Ignore command completely if no mention is running
+    if not context.chat_data.get('mention_active', False):
+        return
+        
     if not await is_admin(chat, user_id):
         return
 
-    if context.chat_data.get('mention_active'):
-        context.chat_data['mention_active'] = False
-        await update.message.reply_text("Mentioning process stopped.")
-    else:
-        await update.message.reply_text("No mention process is currently active.")
+    context.chat_data['mention_active'] = False
+    await update.message.reply_text("Mentioning process stopped.")
 
 def setup(application) -> None:
     """Dynamically loaded by main.py to register handlers."""
     
-    # 1. Regex handler for text-based keywords
     regex_pattern = r'(?i)^(@all|#all|@mentionall)'
     application.add_handler(MessageHandler(filters.Regex(regex_pattern), trigger_mention_panel))
     
-    # 2. Command handler for /mention
     application.add_handler(CommandHandler("mention", trigger_mention_panel))
-    
-    # 3. Command handler for /cancel
     application.add_handler(CommandHandler("cancel", cmd_cancel))
-    
-    # 4. Callback query handler for the panel buttons
     application.add_handler(CallbackQueryHandler(mention_callback, pattern="^mention_"))
     
-    # 5. Background member cacher (Group 1 prevents it from blocking other message handlers)
     application.add_handler(MessageHandler(filters.ALL, cache_members), group=1)
