@@ -2,6 +2,7 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.error import BadRequest
 
 PHOTO_PATH = "assets/welcome.jpg"
 TEXT_FILE = "buttonmessage.txt"
@@ -32,10 +33,14 @@ def load_texts() -> dict:
 def get_total_users(context: ContextTypes.DEFAULT_TYPE) -> int:
     """Helper to calculate total unique members across all cached chats."""
     total = 0
-    # Iterates through all chat_data stored by PicklePersistence
     for data in context.application.chat_data.values():
         total += len(data.get('members', {}))
     return total
+
+def escape_markdown_v2(text: str) -> str:
+    """Escapes raw characters for MarkdownV2 insertion (like numbers/dots)."""
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
 
 def get_main_keyboard() -> InlineKeyboardMarkup:
     """Returns the main inline keyboard."""
@@ -52,14 +57,12 @@ def get_back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="start_back")]])
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles the /start command."""
+    """Handles the /start command as a reply."""
     user = update.effective_user
     texts = load_texts()
     
-    # Inject user mention into the welcome text
     mention = f"[{user.first_name}](tg://user?id={user.id})"
     welcome_text = texts["welcome"].replace("{name}", mention)
-    
     keyboard = get_main_keyboard()
 
     if os.path.exists(PHOTO_PATH):
@@ -80,7 +83,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles the /help command directly."""
+    """Handles the /help command directly as a reply."""
     texts = load_texts()
     await update.message.reply_text(
         text=texts["help"],
@@ -90,16 +93,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 async def start_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles button clicks for the start menu."""
+    """Handles button clicks for the start menu with strict error handling."""
     query = update.callback_query
     await query.answer()
 
     texts = load_texts()
     
     if query.data == "start_about":
-        # Calculate dynamic users and inject into the text
         total_users = get_total_users(context)
-        text_content = texts["about"].replace("{total_users}", str(total_users))
+        escaped_users = escape_markdown_v2(str(total_users))
+        text_content = texts["about"].replace("{total_users}", escaped_users)
         markup = get_back_keyboard()
         
     elif query.data == "start_help":
@@ -114,19 +117,25 @@ async def start_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     else:
         return
 
-    # Update the message with the new text and keyboard
-    if query.message.photo:
-        await query.edit_message_caption(
-            caption=text_content,
-            parse_mode=ParseMode.MARKDOWN_V2,
-            reply_markup=markup
-        )
-    else:
-        await query.edit_message_text(
-            text=text_content,
-            parse_mode=ParseMode.MARKDOWN_V2,
-            reply_markup=markup
-        )
+    try:
+        if query.message.photo:
+            await query.edit_message_caption(
+                caption=text_content,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=markup
+            )
+        else:
+            await query.edit_message_text(
+                text=text_content,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=markup
+            )
+    except BadRequest as e:
+        # Ignore Telegram's error if the user clicks the exact same button multiple times
+        if "Message is not modified" in str(e):
+            pass
+        else:
+            raise e
 
 def setup(application) -> None:
     """Registers handlers."""
