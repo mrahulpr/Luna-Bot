@@ -5,7 +5,7 @@ Welcome 😁, glad to meet you here, iam a simple group management bot to help t
 *About Me 🤩*
 \> 🤖 *Bot Name* : [*\ Luna Bot \*](https://t.me/Taskieebot)
 \> 👨‍💻 *Daddy* : [*\- Rahul P R \-*](https://t.me/rahulp_r)
-\> 💻 *Total Users* : *1* || \[ Only You 🥺 \] ||
+\> 💻 *Total Users* : *{total_users}*
 \> 🔢 *Version* : *v2\.1\.7 \[ Beta \]*
 \> ☂️ *Server* : *VPS*
 
