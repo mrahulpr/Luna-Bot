@@ -29,18 +29,14 @@ async def test_speed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     await query.answer("Starting speed test. This might take a minute...", show_alert=False)
 
-    # Initial "testing" message
     msg = await query.edit_message_text("• 🚀 Running speed test...\n• Please wait ⏳")
 
-    # Animation loop while speedtest runs
     loop = asyncio.get_running_loop()
     animation_task = asyncio.create_task(animate_loading(msg))
 
     try:
-        # Run actual speedtest in separate thread (blocking)
         results = await loop.run_in_executor(None, run_speed_test)
         
-        # Show final results
         await msg.edit_text(
             f"📊 <b>Speed Test Results</b>\n\n"
             f"🖥 <b>Server:</b> <code>{results['server']}</code>\n"
@@ -52,12 +48,11 @@ async def test_speed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         await msg.edit_text(f"❌ <b>Speed test failed:</b>\n<code>{str(e)}</code>", parse_mode=ParseMode.HTML)
     finally:
-        # Guarantee the animation loop shuts down
         if not animation_task.done():
             animation_task.cancel()
 
 async def animate_loading(msg) -> None:
-    """Animates the loading message. Sleeps for 2s to avoid Telegram FloodWait limits."""
+    """Animates the loading message."""
     dots = [".", "..", "...", "...."]
     i = 0
     while True:
@@ -66,7 +61,6 @@ async def animate_loading(msg) -> None:
             await msg.edit_text(f"• 🚀 Running speed test {dots[i % len(dots)]}\n• Please wait ⏳")
             i += 1
         except BadRequest:
-            # Raised if message content is exactly the same, safely ignore
             pass
         except Exception:
             break
@@ -78,8 +72,8 @@ def run_speed_test() -> dict:
     st.download()
     st.upload()
     
-    download = round(st.results.download / 1_000_000, 2)  # Mbps
-    upload = round(st.results.upload / 1_000_000, 2)      # Mbps
+    download = round(st.results.download / 1_000_000, 2)
+    upload = round(st.results.upload / 1_000_000, 2)
     ping = round(st.results.ping, 2)
     server_name = st.results.server.get("name", "Unknown")
     
