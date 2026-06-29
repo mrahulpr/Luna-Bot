@@ -80,7 +80,8 @@ def main() -> None:
     load_plugins(application)
     
     logging.info("Bot is now polling...")
-    application.run_polling()
+    # This prevents the bot from answering old messages on startup
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
