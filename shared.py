@@ -1,9 +1,20 @@
 # shared.py
 import os
+import dns.resolver
+
+# --- 🚨 THE BULLETPROOF DNS FIX 🚨 ---
+# Force Python to use Google's and Cloudflare's public DNS servers
+# This completely bypasses the broken 127.0.0.53 resolver on your host.
+dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
+dns.resolver.default_resolver.nameservers = ['8.8.8.8', '1.1.1.1']
+# -------------------------------------
+
 from motor.motor_asyncio import AsyncIOMotorClient
 
 # Get Environment Variables
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+
+# ... (the rest of your existing shared.py code remains exactly the same below here) ...
 
 try:
     OWNER_ID = int(os.getenv("OWNER_ID", "0"))
