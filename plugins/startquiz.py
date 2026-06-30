@@ -101,48 +101,6 @@ async def post_next_question(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         quiz["current_index"] += 1
         await post_next_question(chat_id, context)
 
-async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Listens globally for users posting the correct answer."""
-    chat_id = update.effective_chat.id
-    quiz = ACTIVE_QUIZZES.get(chat_id)
-    
-    if not quiz or not quiz["is_active"] or not update.message or not update.message.text:
-        return
-        
-    idx = quiz["current_index"]
-    if idx >= len(quiz["questions"]):
-        return
-        
-    current_q = quiz["questions"][idx]
-    
-    # Clean the strings to ensure perfect matching
-    correct_ans = str(current_q.get("answer", "")).strip().lower()
-    user_ans = str(update.message.text).strip().lower()
-    
-    if user_ans == correct_ans:
-        user_id = update.message.from_user.id
-        
-        # 🚨 THE FINAL API-ACCURATE REACTION FIX 🚨
-        # Telegram API strictly requires the reaction to be sent inside an Array/List []
-        try:
-            await context.bot.set_message_reaction(
-                chat_id=chat_id,
-                message_id=update.message.message_id,
-                reaction=[ReactionTypeEmoji("❤")]
-            )
-        except Exception as e:
-            # If the group has restricted custom bot reactions, you will see this text instead!
-            await update.message.reply_text(f"🎉 Correct, {update.message.from_user.first_name}!")
-            print(f"⚠️ REACTION BLOCKED by Telegram Settings: {e}")
-            
-        if user_id not in quiz["solved_by"]:
-            quiz["solved_by"].add(user_id)
-            
-        # Start the countdown timer the moment the FIRST correct answer drops
-        if quiz["timer_task"] is None:
-            config = await settings_col.find_one({"_id": "config"})
-            interval = config.get("interval", 15) if config else 15
-            quiz["timer_task"] = asyncio.create_task(next_question_countdown(chat_id, context, interval))
 
 async def next_question_countdown(chat_id: int, context: ContextTypes.DEFAULT_TYPE, interval: int):
     """Background waiting task to push next question after interval passes."""
@@ -184,15 +142,67 @@ async def cancel_quiz_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     await context.bot.send_message(chat_id, "❌ *Quiz session was stopped mid-way.*", parse_mode="Markdown")
 
-def setup(application) -> None:
-    print("🚀 DEBUG: Attempting to load startquiz.py...")
+async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Listens globally for users posting the correct answer."""
+    # 1. Absolute first check: Is the bot even hearing you?
+    print(f"\n📡 DEBUG: Bot heard a text message: '{update.message.text}'")
     
-    # Added group=2 to force these to bypass any other conflicting handlers!
+    chat_id = update.effective_chat.id
+    quiz = ACTIVE_QUIZZES.get(chat_id)
+    
+    if not quiz or not quiz["is_active"]:
+        print("⚠️ DEBUG: Ignored. No active quiz running in this chat.")
+        return
+        
+    idx = quiz["current_index"]
+    if idx >= len(quiz["questions"]):
+        print("⚠️ DEBUG: Ignored. Quiz is over.")
+        return
+        
+    current_q = quiz["questions"][idx]
+    
+    # Clean strings to ensure no invisible spaces cause a mismatch
+    correct_ans = str(current_q.get("answer", "")).strip().lower()
+    user_ans = str(update.message.text).strip().lower()
+    
+    print(f"🕵️ DEBUG: User answered: '{user_ans}' | Database expects: '{correct_ans}'")
+    
+    if user_ans == correct_ans:
+        print("✅ DEBUG: Match! The answer is correct.")
+        user_id = update.message.from_user.id
+        
+        # 🚨 The Official Telegram API Reaction Array 🚨
+        try:
+            print("❤️ DEBUG: Attempting to send heart reaction...")
+            await context.bot.set_message_reaction(
+                chat_id=chat_id,
+                message_id=update.message.message_id,
+                reaction=[ReactionTypeEmoji("❤")]
+            )
+            print("❤️ DEBUG: Reaction sent successfully!")
+        except Exception as e:
+            print(f"🚨 DEBUG: Reaction failed! Error: {e}")
+            # Fallback so you know it worked even if emojis are disabled
+            await update.message.reply_text(f"🎉 Correct, {update.message.from_user.first_name}!")
+            
+        if user_id not in quiz["solved_by"]:
+            quiz["solved_by"].add(user_id)
+            
+        # Start timer
+        if quiz["timer_task"] is None:
+            print("⏱ DEBUG: Starting timer for next question...")
+            config = await settings_col.find_one({"_id": "config"})
+            interval = config.get("interval", 15) if config else 15
+            quiz["timer_task"] = asyncio.create_task(next_question_countdown(chat_id, context, interval))
+    else:
+        print("❌ DEBUG: Answer did not match the database.")
+
+
+def setup(application) -> None:
+    # Group 2 forces the buttons to bypass any conflicting Admin menus
     application.add_handler(CallbackQueryHandler(start_quiz_menu, pattern="^start_quiz_menu$"), group=2)
     application.add_handler(CallbackQueryHandler(play_topic_start, pattern="^play_topic_"), group=2)
     application.add_handler(CallbackQueryHandler(cancel_quiz_play, pattern="^cancel_quiz_play$"), group=2)
     
-    # Keep the text listener in group 1
+    # Group 1 ensures the text listener runs in the background independently
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_quiz_answer), group=1)
-    
-    print("✅ DEBUG: startquiz.py loaded successfully!")
