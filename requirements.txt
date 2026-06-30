@@ -3,3 +3,6 @@ python-dotenv
 python-telegram-bot>=22.0
 psutil
 speedtest-cli
+pyrogram 
+tgcrypto 
+motor
