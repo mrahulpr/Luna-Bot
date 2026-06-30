@@ -9,12 +9,19 @@ from shared import ACTIVE_QUIZZES, quizzes_col, settings_col, log_error
 
 
 async def start_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Shows the user which topics are available right now to start."""
-    print("🎯 DEBUG: Start Quiz button was clicked!") # <-- ADD THIS LINE
+    print("🎯 DEBUG 1: Button click received!")
     query = update.callback_query
     await query.answer()
+    print("🎯 DEBUG 2: Callback answered successfully.")
     
-    topics = await quizzes_col.distinct("topic")
+    try:
+        print("🎯 DEBUG 3: Asking MongoDB for topics...")
+        topics = await quizzes_col.distinct("topic")
+        print(f"🎯 DEBUG 4: MongoDB replied! Topics found: {topics}")
+    except Exception as e:
+        print(f"🚨 DEBUG ERROR: MongoDB crashed here: {e}")
+        topics = []
+        
     if not topics:
         await query.edit_message_text("😔 No quizzes available in the database yet.")
         return
@@ -25,7 +32,7 @@ async def start_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("❌ Cancel Process", callback_data="cancel_quiz_play", style="danger")])
     
     await query.edit_message_text("🎯 *Select a Quiz Topic to start:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
+    print("🎯 DEBUG 5: Menu successfully sent to user!")
 async def play_topic_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Initializes the chat's active memory dictionary and posts the first question."""
     query = update.callback_query
