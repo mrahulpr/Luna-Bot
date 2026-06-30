@@ -143,45 +143,46 @@ async def cancel_quiz_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id, "❌ *Quiz session was stopped mid-way.*", parse_mode="Markdown")
 
 async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Listens globally for users posting the correct answer."""
-    # 🚨 This will prove the override worked
-    print(f"🚨 OVERRIDE TRIGGERED: Bot saw text: '{update.message.text}'")
-    
+    """Listens globally for users posting the correct answer with a reaction sequence."""
     chat_id = update.effective_chat.id
     quiz = ACTIVE_QUIZZES.get(chat_id)
     
     if not quiz or not quiz["is_active"]:
         return
         
-    idx = quiz["current_index"]
-    if idx >= len(quiz["questions"]):
-        return
-        
-    current_q = quiz["questions"][idx]
-    
-    # Clean strings to ensure no invisible spaces cause a mismatch
+    current_q = quiz["questions"][quiz["current_index"]]
     correct_ans = str(current_q.get("answer", "")).strip().lower()
     user_ans = str(update.message.text).strip().lower()
     
     if user_ans == correct_ans:
         user_id = update.message.from_user.id
         
-        # The Official Telegram API Reaction Array
+        # Prevent double-counting the same user for the same question
+        if user_id in quiz["solved_by"]:
+            return
+            
+        quiz["solved_by"].add(user_id)
+        count = len(quiz["solved_by"])
+        
+        # 🚨 THE REACTION SEQUENCE 🚨
+        # 1st = Heart, 2nd = Party Popper, 3rd+ = Thumbs Up
+        if count == 1:
+            emoji = ReactionEmoji.HEART
+        elif count == 2:
+            emoji = ReactionEmoji.PARTY_POPPER
+        else:
+            emoji = ReactionEmoji.THUMBS_UP
+            
         try:
             await context.bot.set_message_reaction(
                 chat_id=chat_id,
                 message_id=update.message.message_id,
-                reaction=[ReactionTypeEmoji("❤")]
+                reaction=[ReactionTypeEmoji(emoji)]
             )
         except Exception as e:
-            # Fallback so you know it worked even if emojis are disabled
-            await update.message.reply_text(f"🎉 Correct, {update.message.from_user.first_name}!")
-            await log_error(context, "Reaction Failed", e)
+            print(f"⚠️ Reaction failed: {e}")
             
-        if user_id not in quiz["solved_by"]:
-            quiz["solved_by"].add(user_id)
-            
-        # Start timer
+        # Start the countdown timer ONLY if this is the first correct answer
         if quiz["timer_task"] is None:
             config = await settings_col.find_one({"_id": "config"})
             interval = config.get("interval", 15) if config else 15
