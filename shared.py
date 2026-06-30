@@ -27,15 +27,20 @@ except ValueError:
     LOG_CHAT_ID = 0
 
 # Setup MongoDB
+# Database Setup
+
+
+
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 db_client = AsyncIOMotorClient(MONGO_URI)
-db = db_client["telegram_quiz_bot"]
 
+db = db_client["QuizBotDB"]
 # Collections
 admins_col = db["admins"]
 quizzes_col = db["quizzes"]
 settings_col = db["settings"]
 
+progress_col = db["progress"] 
 # ConversationHandler States for Admin panel
 (
     WAITING_ADMIN_ID,
