@@ -1,10 +1,7 @@
-# plugins/startquiz.py
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji
+from telegram.constants import ReactionEmoji
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters, ContextTypes
-
-# Make sure this import perfectly matches your folder structure!
-# If shared.py is inside plugins folder, this must be: from plugins.shared import ...
 from shared import ACTIVE_QUIZZES, quizzes_col, settings_col, log_error
 
 
@@ -129,12 +126,13 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         print("✅ DEBUG: Match found!")
         user_id = update.message.from_user.id
         
-        # 1. Attempt to throw a Heart Reaction using correct PTB v20+ Syntax
+        # 1. Official PTB v20+ API Reaction Syntax
         try:
-            await update.message.set_reaction(reaction=ReactionTypeEmoji("❤"))
+            await update.message.set_reaction(reaction=ReactionTypeEmoji(ReactionEmoji.HEART))
+            print("❤️ DEBUG: Reaction sent successfully!")
         except Exception as e:
-            print(f"⚠️ DEBUG: Telegram blocked the reaction: {e}")
-            # Fallback: If chat restrictions block emojis, reply with text instead!
+            print(f"⚠️ DEBUG: Telegram API Reaction Error: {e}")
+            # Fallback text if the group has disabled custom reactions
             await update.message.reply_text("🎉 Correct!", disable_notification=True)
             
         if user_id not in quiz["solved_by"]:
