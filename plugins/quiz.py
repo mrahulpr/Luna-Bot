@@ -1,11 +1,11 @@
-# plugins/quiz.py
 from bson import ObjectId
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 )
+# Added progress_col to the import list below
 from shared import (
-    is_admin, OWNER_ID, admins_col, quizzes_col, settings_col, log_error,
+    is_admin, OWNER_ID, admins_col, quizzes_col, settings_col, progress_col, log_error,
     WAITING_ADMIN_ID, WAITING_QUIZ_TOPIC, WAITING_QUIZ_QUESTION, WAITING_QUIZ_ANSWER, WAITING_INTERVAL
 )
 
@@ -31,11 +31,13 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await query.answer()
     
+    # Added "Reset Group Progress" button
     keyboard = [
         [InlineKeyboardButton("➕ Add Admin", callback_data="admin_add_admin", style="primary"),
          InlineKeyboardButton("📝 Add Quiz", callback_data="admin_add_quiz", style="primary")],
         [InlineKeyboardButton("🗑 Delete Quiz", callback_data="admin_delete_quiz", style="danger"),
          InlineKeyboardButton("⏱ Set Interval", callback_data="admin_set_interval", style="primary")],
+        [InlineKeyboardButton("🔄 Reset Group Progress", callback_data="admin_reset_progress", style="primary")],
         [InlineKeyboardButton("❌ Cancel", callback_data="admin_cancel", style="danger")]
     ]
     await query.edit_message_text("⚙️ *Admin Panel Options:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
@@ -196,6 +198,39 @@ async def delete_question_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         await log_error(context, "Delete Exception", e)
         await update.message.reply_text("❌ Invalid ID or DB Error.")
 
+# --- 5. RESET GROUP PROGRESS FLOW (New!) ---
+async def reset_progress_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not await is_admin(query.from_user.id):
+        return
+    await query.answer()
+    
+    # We enforce that they must use this inside a group, so we know which chat ID to reset!
+    if update.effective_chat.type == 'private':
+        await query.edit_message_text("⚠️ *Important:* To reset a group's progress, please send the `/quiz` command and click this button **inside that specific group**.", parse_mode="Markdown")
+        return
+
+    topics = ["Maths", "Science", "Social", "GK", "English"]
+    keyboard = [[InlineKeyboardButton(t, callback_data=f"resetq_topic_{t}", style="primary")] for t in topics]
+    keyboard.append([InlineKeyboardButton("❌ Cancel Process", callback_data="admin_cancel", style="danger")])
+
+    await query.edit_message_text("🔄 *Choose a topic* to reset progress for THIS group:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+async def reset_progress_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    topic = query.data.split("_")[-1]
+    chat_id = update.effective_chat.id
+
+    try:
+        # Delete the progress memory for this chat and topic
+        await progress_col.delete_one({"chat_id": chat_id, "topic": topic})
+        await query.edit_message_text(f"✅ Progress for **{topic}** has been successfully reset!\n\nThis group can now play all questions again.", parse_mode="Markdown")
+    except Exception as e:
+        await log_error(context, "Reset Progress Exception", e)
+        await query.edit_message_text("❌ Failed to reset progress due to a database error.")
+
+# --- CANCEL FALLBACK ---
 async def admin_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         await update.callback_query.answer()
@@ -235,3 +270,7 @@ def setup(application) -> None:
     application.add_handler(CallbackQueryHandler(delete_quiz_start, pattern="^admin_delete_quiz$"))
     application.add_handler(CallbackQueryHandler(delete_quiz_topic, pattern="^delq_(topic|page)_"))
     application.add_handler(MessageHandler(filters.Regex(r"^/delete_question_[a-fA-F0-9]{24}$"), delete_question_cmd))
+    
+    # 4. Independent Handlers for Group Progress Reset (New!)
+    application.add_handler(CallbackQueryHandler(reset_progress_start, pattern="^admin_reset_progress$"))
+    application.add_handler(CallbackQueryHandler(reset_progress_topic, pattern="^resetq_topic_"))
