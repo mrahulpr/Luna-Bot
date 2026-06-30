@@ -1,6 +1,6 @@
 # plugins/startquiz.py
 import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 # Make sure this import perfectly matches your folder structure!
@@ -118,25 +118,33 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
         
     current_q = quiz["questions"][idx]
-    correct_ans = current_q.get("answer", "").strip().lower()
-    user_ans = update.message.text.strip().lower()
+    
+    # Force both database and user answers to be perfectly clean strings
+    correct_ans = str(current_q.get("answer", "")).strip().lower()
+    user_ans = str(update.message.text).strip().lower()
+    
+    print(f"🕵️ DEBUG: User said '{user_ans}' | Correct answer is '{correct_ans}'")
     
     if user_ans == correct_ans:
+        print("✅ DEBUG: Match found!")
         user_id = update.message.from_user.id
         
-        # Throw heart reaction - gracefully fail if chat restricted reactions
+        # 1. Attempt to throw a Heart Reaction using correct PTB v20+ Syntax
         try:
-            await update.message.set_reaction(reaction="❤️")
-        except Exception:
-            pass 
+            await update.message.set_reaction(reaction=ReactionTypeEmoji("❤"))
+        except Exception as e:
+            print(f"⚠️ DEBUG: Telegram blocked the reaction: {e}")
+            # Fallback: If chat restrictions block emojis, reply with text instead!
+            await update.message.reply_text("🎉 Correct!", disable_notification=True)
             
         if user_id not in quiz["solved_by"]:
             quiz["solved_by"].add(user_id)
             
-        # Start the countdown timer the moment the FIRST correct answer drops.
+        # 2. Start the countdown timer the moment the FIRST correct answer drops
         if quiz["timer_task"] is None:
+            print("⏱ DEBUG: Starting next question countdown...")
             config = await settings_col.find_one({"_id": "config"})
-            interval = config.get("interval", 30) if config else 30
+            interval = config.get("interval", 15) if config else 15
             quiz["timer_task"] = asyncio.create_task(next_question_countdown(chat_id, context, interval))
 
 async def next_question_countdown(chat_id: int, context: ContextTypes.DEFAULT_TYPE, interval: int):
