@@ -157,37 +157,39 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if user_ans == correct_ans:
         user_id = update.message.from_user.id
         
-        # Prevent double-counting the same user for the same question
+        # Prevent double-counting the same user
         if user_id in quiz["solved_by"]:
             return
             
         quiz["solved_by"].add(user_id)
         count = len(quiz["solved_by"])
         
-        # 🚨 THE REACTION SEQUENCE 🚨
-        # 1st = Heart, 2nd = Party Popper, 3rd+ = Thumbs Up
+        # 🚨 THE HARDCODED EMOJI SEQUENCE 🚨
+        # These are the exact Unicode characters the API expects
         if count == 1:
-            emoji = ReactionEmoji.HEART
+            reaction_char = "❤"
         elif count == 2:
-            emoji = ReactionEmoji.PARTY_POPPER
+            reaction_char = "🎉"
         else:
-            emoji = ReactionEmoji.THUMBS_UP
+            reaction_char = "👍"
             
         try:
+            # Send the reaction using the hardcoded string
             await context.bot.set_message_reaction(
                 chat_id=chat_id,
                 message_id=update.message.message_id,
-                reaction=[ReactionTypeEmoji(emoji)]
+                reaction=[ReactionTypeEmoji(reaction_char)]
             )
         except Exception as e:
             print(f"⚠️ Reaction failed: {e}")
+            # Fallback text
+            await update.message.reply_text(f"Correct! ({reaction_char})", disable_notification=True)
             
         # Start the countdown timer ONLY if this is the first correct answer
         if quiz["timer_task"] is None:
             config = await settings_col.find_one({"_id": "config"})
             interval = config.get("interval", 15) if config else 15
             quiz["timer_task"] = asyncio.create_task(next_question_countdown(chat_id, context, interval))
-
 
 def setup(application) -> None:
     # Buttons stay in Group 2 so they don't fight with Admin menus
