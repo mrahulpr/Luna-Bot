@@ -182,9 +182,12 @@ async def cancel_quiz_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def setup(application) -> None:
     print("🚀 DEBUG: Attempting to load startquiz.py...")
     
-    application.add_handler(CallbackQueryHandler(start_quiz_menu, pattern="^start_quiz_menu$"))
-    application.add_handler(CallbackQueryHandler(play_topic_start, pattern="^play_topic_"))
-    application.add_handler(CallbackQueryHandler(cancel_quiz_play, pattern="^cancel_quiz_play$"))
+    # Added group=2 to force these to bypass any other conflicting handlers!
+    application.add_handler(CallbackQueryHandler(start_quiz_menu, pattern="^start_quiz_menu$"), group=2)
+    application.add_handler(CallbackQueryHandler(play_topic_start, pattern="^play_topic_"), group=2)
+    application.add_handler(CallbackQueryHandler(cancel_quiz_play, pattern="^cancel_quiz_play$"), group=2)
+    
+    # Keep the text listener in group 1
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_quiz_answer), group=1)
     
     print("✅ DEBUG: startquiz.py loaded successfully!")
