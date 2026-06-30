@@ -171,4 +171,8 @@ def setup(application) -> None:
     application.add_handler(CallbackQueryHandler(start_quiz_menu, pattern="^start_quiz_menu$"))
     application.add_handler(CallbackQueryHandler(play_topic_start, pattern="^play_topic_"))
     application.add_handler(CallbackQueryHandler(cancel_quiz_play, pattern="^cancel_quiz_play$"))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_quiz_answer))
+    
+    # THE FIX: Added `group=1` here. 
+    # This forces the bot to check the ConversationHandler first, 
+    # and run this background listener independently so they don't block each other.
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_quiz_answer), group=1)
