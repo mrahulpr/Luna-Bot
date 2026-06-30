@@ -1,11 +1,16 @@
 # plugins/startquiz.py
 import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackQueryHandler, MessageHandler, filters, ContextTypes
+
+# Make sure this import perfectly matches your folder structure!
+# If shared.py is inside plugins folder, this must be: from plugins.shared import ...
 from shared import ACTIVE_QUIZZES, quizzes_col, settings_col, log_error
+
 
 async def start_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Shows the user which topics are available right now to start."""
+    print("🎯 DEBUG: Start Quiz button was clicked!") # <-- ADD THIS LINE
     query = update.callback_query
     await query.answer()
     
@@ -168,11 +173,11 @@ async def cancel_quiz_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id, "❌ *Quiz session was stopped mid-way.*", parse_mode="Markdown")
 
 def setup(application) -> None:
+    print("🚀 DEBUG: Attempting to load startquiz.py...")
+    
     application.add_handler(CallbackQueryHandler(start_quiz_menu, pattern="^start_quiz_menu$"))
     application.add_handler(CallbackQueryHandler(play_topic_start, pattern="^play_topic_"))
     application.add_handler(CallbackQueryHandler(cancel_quiz_play, pattern="^cancel_quiz_play$"))
-    
-    # THE FIX: Added `group=1` here. 
-    # This forces the bot to check the ConversationHandler first, 
-    # and run this background listener independently so they don't block each other.
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_quiz_answer), group=1)
+    
+    print("✅ DEBUG: startquiz.py loaded successfully!")
