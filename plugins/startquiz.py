@@ -106,7 +106,6 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     chat_id = update.effective_chat.id
     quiz = ACTIVE_QUIZZES.get(chat_id)
     
-    # Early returns if no quiz active
     if not quiz or not quiz["is_active"] or not update.message or not update.message.text:
         return
         
@@ -116,31 +115,31 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
     current_q = quiz["questions"][idx]
     
-    # Force both database and user answers to be perfectly clean strings
+    # Clean the strings to ensure perfect matching
     correct_ans = str(current_q.get("answer", "")).strip().lower()
     user_ans = str(update.message.text).strip().lower()
     
-    print(f"🕵️ DEBUG: User said '{user_ans}' | Correct answer is '{correct_ans}'")
-    
     if user_ans == correct_ans:
-        print("✅ DEBUG: Match found!")
         user_id = update.message.from_user.id
         
-        # 1. Official PTB v20+ API Reaction Syntax
+        # 🚨 THE FINAL API-ACCURATE REACTION FIX 🚨
+        # Telegram API strictly requires the reaction to be sent inside an Array/List []
         try:
-            await update.message.set_reaction(reaction=ReactionTypeEmoji(ReactionEmoji.HEART))
-            print("❤️ DEBUG: Reaction sent successfully!")
+            await context.bot.set_message_reaction(
+                chat_id=chat_id,
+                message_id=update.message.message_id,
+                reaction=[ReactionTypeEmoji("❤")]
+            )
         except Exception as e:
-            print(f"⚠️ DEBUG: Telegram API Reaction Error: {e}")
-            # Fallback text if the group has disabled custom reactions
-            await update.message.reply_text("🎉 Correct!", disable_notification=True)
+            # If the group has restricted custom bot reactions, you will see this text instead!
+            await update.message.reply_text(f"🎉 Correct, {update.message.from_user.first_name}!")
+            print(f"⚠️ REACTION BLOCKED by Telegram Settings: {e}")
             
         if user_id not in quiz["solved_by"]:
             quiz["solved_by"].add(user_id)
             
-        # 2. Start the countdown timer the moment the FIRST correct answer drops
+        # Start the countdown timer the moment the FIRST correct answer drops
         if quiz["timer_task"] is None:
-            print("⏱ DEBUG: Starting next question countdown...")
             config = await settings_col.find_one({"_id": "config"})
             interval = config.get("interval", 15) if config else 15
             quiz["timer_task"] = asyncio.create_task(next_question_countdown(chat_id, context, interval))
