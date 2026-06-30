@@ -144,19 +144,17 @@ async def cancel_quiz_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Listens globally for users posting the correct answer."""
-    # 1. Absolute first check: Is the bot even hearing you?
-    print(f"\n📡 DEBUG: Bot heard a text message: '{update.message.text}'")
+    # 🚨 This will prove the override worked
+    print(f"🚨 OVERRIDE TRIGGERED: Bot saw text: '{update.message.text}'")
     
     chat_id = update.effective_chat.id
     quiz = ACTIVE_QUIZZES.get(chat_id)
     
     if not quiz or not quiz["is_active"]:
-        print("⚠️ DEBUG: Ignored. No active quiz running in this chat.")
         return
         
     idx = quiz["current_index"]
     if idx >= len(quiz["questions"]):
-        print("⚠️ DEBUG: Ignored. Quiz is over.")
         return
         
     current_q = quiz["questions"][idx]
@@ -165,42 +163,40 @@ async def handle_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     correct_ans = str(current_q.get("answer", "")).strip().lower()
     user_ans = str(update.message.text).strip().lower()
     
-    print(f"🕵️ DEBUG: User answered: '{user_ans}' | Database expects: '{correct_ans}'")
-    
     if user_ans == correct_ans:
-        print("✅ DEBUG: Match! The answer is correct.")
         user_id = update.message.from_user.id
         
-        # 🚨 The Official Telegram API Reaction Array 🚨
+        # The Official Telegram API Reaction Array
         try:
-            print("❤️ DEBUG: Attempting to send heart reaction...")
             await context.bot.set_message_reaction(
                 chat_id=chat_id,
                 message_id=update.message.message_id,
                 reaction=[ReactionTypeEmoji("❤")]
             )
-            print("❤️ DEBUG: Reaction sent successfully!")
         except Exception as e:
-            print(f"🚨 DEBUG: Reaction failed! Error: {e}")
             # Fallback so you know it worked even if emojis are disabled
             await update.message.reply_text(f"🎉 Correct, {update.message.from_user.first_name}!")
+            await log_error(context, "Reaction Failed", e)
             
         if user_id not in quiz["solved_by"]:
             quiz["solved_by"].add(user_id)
             
         # Start timer
         if quiz["timer_task"] is None:
-            print("⏱ DEBUG: Starting timer for next question...")
             config = await settings_col.find_one({"_id": "config"})
             interval = config.get("interval", 15) if config else 15
             quiz["timer_task"] = asyncio.create_task(next_question_countdown(chat_id, context, interval))
-    else:
-        print("❌ DEBUG: Answer did not match the database.")
 
 
 def setup(application) -> None:
-    # Group 2 forces the buttons to bypass any conflicting Admin menus
+    # Buttons stay in Group 2 so they don't fight with Admin menus
     application.add_handler(CallbackQueryHandler(start_quiz_menu, pattern="^start_quiz_menu$"), group=2)
+    application.add_handler(CallbackQueryHandler(play_topic_start, pattern="^play_topic_"), group=2)
+    application.add_handler(CallbackQueryHandler(cancel_quiz_play, pattern="^cancel_quiz_play$"), group=2)
+    
+    # 🚨 THE OVERRIDE FIX 🚨
+    # group=-1 forces this to execute BEFORE main.py or any other plugins can eat the text message.
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_quiz_answer), group=-1)
     application.add_handler(CallbackQueryHandler(play_topic_start, pattern="^play_topic_"), group=2)
     application.add_handler(CallbackQueryHandler(cancel_quiz_play, pattern="^cancel_quiz_play$"), group=2)
     
