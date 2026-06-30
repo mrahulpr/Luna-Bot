@@ -1,184 +1,237 @@
 # plugins/quiz.py
-import traceback
-from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
-from bson.objectid import ObjectId
-from shared import db, admins_col, quizzes_col, settings_col, ADMIN_STATES, OWNER_ID, log_error
+from bson import ObjectId
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+)
+from shared import (
+    is_admin, OWNER_ID, admins_col, quizzes_col, settings_col, log_error,
+    WAITING_ADMIN_ID, WAITING_QUIZ_TOPIC, WAITING_QUIZ_QUESTION, WAITING_QUIZ_ANSWER, WAITING_INTERVAL
+)
 
-@Client.on_message(filters.command("quiz"))
-async def quiz_command(client: Client, message: Message):
-    try:
-        # Pass the user ID in the callback data so we know who initiated it
-        user_id = message.from_user.id
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🟢 Start Quiz", callback_data=f"start_quiz:{user_id}")],
-            [InlineKeyboardButton("🔵 Admin Only", callback_data="admin_menu")]
-        ])
-        await message.reply("Welcome to the Quiz! Please choose an option below:", reply_markup=keyboard)
-    except Exception as e:
-        await log_error(client, traceback.format_exc())
+async def quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Main entry point for any user requesting the quiz panel."""
+    keyboard = [
+        [
+            InlineKeyboardButton("▶️ Start Quiz", callback_data="start_quiz_menu", style="success"),
+            InlineKeyboardButton("⚙️ Admin Only", callback_data="admin_menu", style="primary")
+        ]
+    ]
+    await update.message.reply_text(
+        "🎯 *Welcome to the Quiz System*\n\nPlease choose an option below:", 
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
-@Client.on_callback_query(filters.regex("^admin_menu$"))
-async def admin_menu(client: Client, callback: CallbackQuery):
-    try:
-        user_id = callback.from_user.id
-        
-        # Check Authorization
-        is_admin = await admins_col.find_one({"user_id": user_id})
-        if user_id != OWNER_ID and not is_admin:
-            return await callback.answer("Only admins can use this.", show_alert=True)
-        
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Add Admin", callback_data="add_admin"),
-             InlineKeyboardButton("Set Interval", callback_data="set_interval")],
-            [InlineKeyboardButton("Add Quiz Topic/Question", callback_data="add_quiz")],
-            [InlineKeyboardButton("Delete Quiz", callback_data="delete_quiz_topics")],
-            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_admin")]
-        ])
-        await callback.edit_message_text("🛠 **Admin Panel**\nChoose an action:", reply_markup=keyboard)
-    except Exception as e:
-        await log_error(client, traceback.format_exc())
-
-@Client.on_callback_query(filters.regex("^(add_admin|set_interval|add_quiz)$"))
-async def admin_actions(client: Client, callback: CallbackQuery):
-    action = callback.data
-    user_id = callback.from_user.id
-    
-    # Restrict Add Admin to OWNER only
-    if action == "add_admin" and user_id != OWNER_ID:
-        return await callback.answer("Only the Owner can add admins.", show_alert=True)
-    
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_admin")]])
-    
-    if action == "add_admin":
-        ADMIN_STATES[user_id] = {"step": "wait_admin_id"}
-        await callback.edit_message_text("Send the User ID of the new admin:", reply_markup=cancel_kb)
-    
-    elif action == "set_interval":
-        ADMIN_STATES[user_id] = {"step": "wait_interval"}
-        await callback.edit_message_text("Send the time interval (in seconds) between quizzes:", reply_markup=cancel_kb)
-        
-    elif action == "add_quiz":
-        ADMIN_STATES[user_id] = {"step": "wait_topic"}
-        await callback.edit_message_text("Send the Topic Name for this quiz (e.g., Maths, Science):", reply_markup=cancel_kb)
-
-@Client.on_callback_query(filters.regex("^cancel_admin$"))
-async def cancel_admin(client: Client, callback: CallbackQuery):
-    user_id = callback.from_user.id
-    if user_id in ADMIN_STATES:
-        del ADMIN_STATES[user_id]
-    await callback.edit_message_text("Action cancelled.")
-
-# --- FSM (State Machine) for Admin Inputs ---
-@Client.on_message(filters.private & filters.text & ~filters.command(["quiz", "delete_question"]))
-async def process_admin_inputs(client: Client, message: Message):
-    user_id = message.from_user.id
-    if user_id not in ADMIN_STATES:
+async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Verifies admin status and displays the Admin panel."""
+    query = update.callback_query
+    if not await is_admin(query.from_user.id):
+        await query.answer("❌ Only admins can use this.", show_alert=True)
         return
+    await query.answer()
     
-    state = ADMIN_STATES[user_id]
-    step = state.get("step")
-    
+    keyboard = [
+        [InlineKeyboardButton("➕ Add Admin", callback_data="admin_add_admin", style="primary"),
+         InlineKeyboardButton("📝 Add Quiz", callback_data="admin_add_quiz", style="primary")],
+        [InlineKeyboardButton("🗑 Delete Quiz", callback_data="admin_delete_quiz", style="danger"),
+         InlineKeyboardButton("⏱ Set Interval", callback_data="admin_set_interval", style="primary")],
+        [InlineKeyboardButton("❌ Cancel", callback_data="admin_cancel", style="danger")]
+    ]
+    await query.edit_message_text("⚙️ *Admin Panel Options:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+# --- 1. ADD ADMIN FLOW ---
+async def add_admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query.from_user.id != OWNER_ID:
+        await query.answer("❌ Only the Owner can assign new admins.", show_alert=True)
+        return ConversationHandler.END
+    await query.answer()
+    keyboard = [[InlineKeyboardButton("❌ Cancel Process", callback_data="admin_cancel", style="danger")]]
+    await query.edit_message_text("Send the *User ID* to authorize them as Admin:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    return WAITING_ADMIN_ID
+
+async def add_admin_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        if step == "wait_admin_id":
-            new_admin_id = int(message.text)
-            await admins_col.insert_one({"user_id": new_admin_id})
-            await message.reply(f"✅ User `{new_admin_id}` added as admin.")
-            del ADMIN_STATES[user_id]
-            
-        elif step == "wait_interval":
-            interval = int(message.text)
-            await settings_col.update_one({"key": "quiz_interval"}, {"$set": {"value": interval}}, upsert=True)
-            await message.reply(f"✅ Quiz interval set to {interval} seconds.")
-            del ADMIN_STATES[user_id]
-            
-        elif step == "wait_topic":
-            state["topic"] = message.text
-            state["step"] = "wait_question"
-            await message.reply(f"Topic set to **{message.text}**.\n\nNow send the Question (Text or Photo):")
-            
-        elif step == "wait_answer":
-            # Save the quiz to the database
-            topic = state["topic"]
-            q_type = state["q_type"]
-            q_content = state["q_content"]
-            answer = message.text.strip()
-            
-            await quizzes_col.insert_one({
-                "topic": topic,
-                "type": q_type,
-                "content": q_content,
-                "answer": answer
-            })
-            await message.reply("✅ Quiz question added successfully!\n\nYou can send another question for this topic or type /cancel.")
-            state["step"] = "wait_question" # Loop back to add more questions to the same topic
-            
+        new_admin_id = int(update.message.text.strip())
+        await admins_col.update_one({"user_id": new_admin_id}, {"$set": {"user_id": new_admin_id}}, upsert=True)
+        await update.message.reply_text(f"✅ User `{new_admin_id}` is now an authorized Admin.", parse_mode="Markdown")
     except ValueError:
-        await message.reply("Invalid input. Please provide a valid number.")
-    except Exception as e:
-        await log_error(client, traceback.format_exc())
+        await update.message.reply_text("❌ Invalid ID format. It must be an integer number.")
+    return ConversationHandler.END
 
-@Client.on_message(filters.private & (filters.text | filters.photo) & ~filters.command("quiz"))
-async def process_question_input(client: Client, message: Message):
-    user_id = message.from_user.id
-    if user_id not in ADMIN_STATES:
-        return
-    
-    state = ADMIN_STATES[user_id]
-    if state.get("step") == "wait_question":
-        try:
-            if message.photo:
-                state["q_type"] = "photo"
-                state["q_content"] = message.photo.file_id
-            else:
-                state["q_type"] = "text"
-                state["q_content"] = message.text
-                
-            state["step"] = "wait_answer"
-            await message.reply("Great! Now send the **exact correct answer** for this question:")
-        except Exception as e:
-            await log_error(client, traceback.format_exc())
+# --- 2. ADD QUIZ FLOW ---
+async def add_quiz_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    topics = ["Maths", "Science", "Social", "GK", "English"]
+    keyboard = [[InlineKeyboardButton(t, callback_data=f"addq_topic_{t}", style="primary")] for t in topics]
+    keyboard.append([InlineKeyboardButton("❌ Cancel Process", callback_data="admin_cancel", style="danger")])
+    await query.edit_message_text("📚 *Choose a Topic* to add questions to:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    return WAITING_QUIZ_TOPIC
 
-# --- Delete Logic ---
-@Client.on_callback_query(filters.regex("^delete_quiz_topics$"))
-async def delete_quiz_topics(client: Client, callback: CallbackQuery):
-    # Fetch distinct topics
-    topics = await quizzes_col.distinct("topic")
-    if not topics:
-        return await callback.answer("No quizzes found.", show_alert=True)
-    
-    kb = [[InlineKeyboardButton(t, callback_data=f"del_topic:{t}")] for t in topics]
-    kb.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_admin")])
-    await callback.edit_message_text("Select a topic to delete questions from:", reply_markup=InlineKeyboardMarkup(kb))
+async def add_quiz_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    topic = query.data.split("_")[-1]
+    context.user_data['current_topic'] = topic
+    keyboard = [[InlineKeyboardButton("❌ Cancel Process", callback_data="admin_cancel", style="danger")]]
+    await query.edit_message_text(f"📌 *Topic:* {topic}\n\nSend the *Question* now (Upload a Photo with caption or send a Text message):", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    return WAITING_QUIZ_QUESTION
 
-@Client.on_callback_query(filters.regex("^del_topic:(.*)"))
-async def show_delete_questions(client: Client, callback: CallbackQuery):
-    topic = callback.matches[0].group(1)
-    # Fetching first 20 for simplicity (You can expand this with pagination pages later)
-    cursor = quizzes_col.find({"topic": topic}).limit(20)
-    questions = await cursor.to_list(length=20)
-    
-    text = f"**Questions for {topic}** (First 20):\n\n"
-    for q in questions:
-        q_preview = q["content"] if q["type"] == "text" else "[Photo Question]"
-        text += f"Q: {q_preview[:30]}...\nCommand: `/delete_question {str(q['_id'])}`\n\n"
+async def add_quiz_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if msg.photo:
+        context.user_data['q_type'] = 'photo'
+        context.user_data['q_file_id'] = msg.photo[-1].file_id
+        context.user_data['q_text'] = msg.caption or ""
+    else:
+        context.user_data['q_type'] = 'text'
+        context.user_data['q_text'] = msg.text or ""
         
-    await callback.message.reply(text)
-    await callback.answer()
+    await msg.reply_text("Got it! Now send the **exact correct answer** (Text format):", parse_mode="Markdown")
+    return WAITING_QUIZ_ANSWER
 
-@Client.on_message(filters.command("delete_question"))
-async def delete_specific_question(client: Client, message: Message):
+async def add_quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    answer = update.message.text.strip().lower()
+    topic = context.user_data.get('current_topic', 'General')
+    doc = {
+        "topic": topic,
+        "type": context.user_data['q_type'],
+        "text": context.user_data.get('q_text', ''),
+        "file_id": context.user_data.get('q_file_id', ''),
+        "answer": answer
+    }
     try:
-        user_id = message.from_user.id
-        is_admin = await admins_col.find_one({"user_id": user_id})
-        if user_id != OWNER_ID and not is_admin:
-            return await message.reply("Unauthorized.")
-            
-        q_id = message.command[1]
-        result = await quizzes_col.delete_one({"_id": ObjectId(q_id)})
-        if result.deleted_count > 0:
-            await message.reply("✅ Question deleted.")
-        else:
-            await message.reply("❌ Question not found.")
+        await quizzes_col.insert_one(doc)
     except Exception as e:
-        await log_error(client, traceback.format_exc())
+        await log_error(context, "Database Insertion Failed", e)
+        await update.message.reply_text("❌ Database error while saving.")
+        return ConversationHandler.END
+        
+    keyboard = [[InlineKeyboardButton("❌ Finish / Cancel", callback_data="admin_cancel", style="danger")]]
+    await update.message.reply_text(f"✅ *Question Saved to {topic}!*\n\nSend the **next question** (Photo/Text) for this topic, or click Finish to stop.", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    return WAITING_QUIZ_QUESTION
+
+# --- 3. SET INTERVAL FLOW ---
+async def set_interval_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [[InlineKeyboardButton("❌ Cancel Process", callback_data="admin_cancel", style="danger")]]
+    await query.edit_message_text("⏱ Send the *time interval* in seconds between quizzes:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    return WAITING_INTERVAL
+
+async def set_interval_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        secs = int(update.message.text.strip())
+        await settings_col.update_one({"_id": "config"}, {"$set": {"interval": secs}}, upsert=True)
+        await update.message.reply_text(f"✅ Interval updated. Next quiz will post {secs} seconds after a correct answer.")
+    except Exception as e:
+        await update.message.reply_text("❌ Please send a valid number.")
+    return ConversationHandler.END
+
+# --- 4. DELETE QUIZ FLOW (Independent Callback & Message) ---
+async def delete_quiz_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not await is_admin(query.from_user.id):
+        return
+    await query.answer()
+    topics = ["Maths", "Science", "Social", "GK", "English"]
+    keyboard = [[InlineKeyboardButton(t, callback_data=f"delq_topic_{t}", style="primary")] for t in topics]
+    keyboard.append([InlineKeyboardButton("❌ Cancel Process", callback_data="admin_cancel", style="danger")])
+    await query.edit_message_text("🗑 *Choose a topic* to delete questions from:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+async def delete_quiz_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    parts = query.data.split("_")
+    
+    if parts[1] == "topic":
+        topic, page = parts[2], 0
+    else:
+        topic, page = parts[2], int(parts[3])
+        
+    cursor = quizzes_col.find({"topic": topic})
+    questions = await cursor.to_list(length=None)
+    total = len(questions)
+    
+    if total == 0:
+        await query.edit_message_text("No questions found in this topic.")
+        return
+        
+    batch_size = 10
+    start = page * batch_size
+    end = start + batch_size
+    batch = questions[start:end]
+    
+    text = f"🗑 *Questions in {topic} (Batch {start+1} to {min(end, total)}):*\n\n"
+    for i, q in enumerate(batch):
+        q_text = q.get('text', '🖼 [Photo Question]')[:35].replace('\n', ' ')
+        text += f"{start+i+1}. {q_text}...\n👉 Delete: /delete_question_{str(q['_id'])}\n\n"
+        
+    buttons = []
+    nav_row = []
+    if page > 0:
+        nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"delq_page_{topic}_{page-1}", style="primary"))
+    if end < total:
+        nav_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"delq_page_{topic}_{page+1}", style="primary"))
+        
+    if nav_row:
+        buttons.append(nav_row)
+    buttons.append([InlineKeyboardButton("❌ Cancel Process", callback_data="admin_cancel", style="danger")])
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+async def delete_question_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update.message.from_user.id):
+        return
+    q_id = update.message.text.split("_")[-1]
+    try:
+        res = await quizzes_col.delete_one({"_id": ObjectId(q_id)})
+        if res.deleted_count > 0:
+            await update.message.reply_text("✅ Question permanently deleted.")
+        else:
+            await update.message.reply_text("❌ Question not found in Database.")
+    except Exception as e:
+        await log_error(context, "Delete Exception", e)
+        await update.message.reply_text("❌ Invalid ID or DB Error.")
+
+async def admin_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("❌ Action cancelled.")
+    else:
+        await update.message.reply_text("❌ Action cancelled.")
+    return ConversationHandler.END
+
+def setup(application) -> None:
+    # 1. Base command and open menu
+    application.add_handler(CommandHandler("quiz", quiz_command))
+    application.add_handler(CallbackQueryHandler(admin_menu, pattern="^admin_menu$"))
+    
+    # 2. Conversation Handler for Admin flows
+    admin_conv = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(add_admin_start, pattern="^admin_add_admin$"),
+            CallbackQueryHandler(add_quiz_start, pattern="^admin_add_quiz$"),
+            CallbackQueryHandler(set_interval_start, pattern="^admin_set_interval$")
+        ],
+        states={
+            WAITING_ADMIN_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_admin_receive)],
+            WAITING_QUIZ_TOPIC: [CallbackQueryHandler(add_quiz_topic, pattern="^addq_topic_")],
+            WAITING_QUIZ_QUESTION: [MessageHandler((filters.PHOTO | filters.TEXT) & ~filters.COMMAND, add_quiz_question)],
+            WAITING_QUIZ_ANSWER: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_quiz_answer)],
+            WAITING_INTERVAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_interval_receive)],
+        },
+        fallbacks=[
+            CallbackQueryHandler(admin_cancel, pattern="^admin_cancel$"),
+            CommandHandler("cancel", admin_cancel)
+        ],
+        per_message=False 
+    )
+    application.add_handler(admin_conv)
+    
+    # 3. Independent Handlers for Deletion & Pagination
+    application.add_handler(CallbackQueryHandler(delete_quiz_start, pattern="^admin_delete_quiz$"))
+    application.add_handler(CallbackQueryHandler(delete_quiz_topic, pattern="^delq_(topic|page)_"))
+    application.add_handler(MessageHandler(filters.Regex(r"^/delete_question_[a-fA-F0-9]{24}$"), delete_question_cmd))
