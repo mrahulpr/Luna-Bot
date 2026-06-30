@@ -8,7 +8,9 @@ from shared import ACTIVE_QUIZZES, quizzes_col, settings_col, log_error
 async def start_quiz_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("🎯 DEBUG 1: Button click received!")
     query = update.callback_query
-    await query.answer()import asyncio
+    await query.answer()
+    
+import asyncio
 import random # Added for shuffling questions
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji
 from telegram.constants import ReactionEmoji
