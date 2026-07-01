@@ -65,4 +65,4 @@ async def track_new_users(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 def setup(application) -> None:
     # Group -1 ensures this runs before standard handlers (which default to group 0)
-    application.add_handler(TypeHandler(Update, track_new_users), group=-1)
+    application.add_handler(TypeHandler(Update, track_new_users), group=-2)
